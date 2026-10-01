@@ -92,7 +92,7 @@ function Index() {
     } catch {}
   }
 
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string | undefined } | null>(null);
 
   function persistSaved(next: Place[], uid: string | null = user?.id ?? null) {
     setSaved(next);
@@ -103,7 +103,7 @@ function Index() {
   }
 
   useEffect(() => {
-    async function syncFor(u: { id: string; email?: string } | null) {
+    async function syncFor(u: { id: string; email?: string | undefined } | null) {
       setUser(u);
       if (!u) return;
       try {
