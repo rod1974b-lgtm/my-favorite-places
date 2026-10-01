@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { describe, fetchWeather, loadCached, searchCity, skyKey, type Place, type Weather } from "@/lib/weather";
+import { supabase } from "@/integrations/supabase/client";
+import { fetchCloudPlaces, pushCloudPlaces } from "@/lib/cloud-places";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -90,12 +92,41 @@ function Index() {
     } catch {}
   }
 
-  function persistSaved(next: Place[]) {
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+
+  function persistSaved(next: Place[], uid: string | null = user?.id ?? null) {
     setSaved(next);
     try {
       localStorage.setItem(SAVED_KEY, JSON.stringify(next));
     } catch {}
+    if (uid) pushCloudPlaces(uid, next).catch((e) => console.error("Sync failed", e));
   }
+
+  useEffect(() => {
+    async function syncFor(u: { id: string; email?: string } | null) {
+      setUser(u);
+      if (!u) return;
+      try {
+        const cloud = await fetchCloudPlaces();
+        const local = loadSaved();
+        const merged = [...cloud, ...local.filter((l) => !cloud.some((c) => samePlace(c, l)))];
+        persistSaved(merged, merged.length !== cloud.length ? u.id : null);
+      } catch (e) {
+        console.error("Sync failed", e);
+      }
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      const u = data.session?.user;
+      syncFor(u ? { id: u.id, email: u.email } : null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT") return;
+      const u = session?.user;
+      setTimeout(() => syncFor(u ? { id: u.id, email: u.email } : null), 0);
+    });
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleSave(place: Place) {
     persistSaved(
@@ -226,6 +257,19 @@ function Index() {
             <Link to="/privacy" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
               Privacy
             </Link>
+            {user ? (
+              <button
+                onClick={() => supabase.auth.signOut()}
+                title={user.email ? `Signed in as ${user.email}` : "Signed in"}
+                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Sign out
+              </button>
+            ) : (
+              <Link to="/auth" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+                Sign in to sync
+              </Link>
+            )}
           </div>
         </header>
 
