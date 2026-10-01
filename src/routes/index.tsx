@@ -74,6 +74,16 @@ function Index() {
     persistSaved(saved.filter((s) => !samePlace(s, place)));
   }
 
+  function moveSaved(index: number, dir: -1 | 1) {
+    const to = index + dir;
+    if (to < 0 || to >= saved.length) return;
+    const next = [...saved];
+    const item = next[index]!;
+    next[index] = next[to]!;
+    next[to] = item;
+    persistSaved(next);
+  }
+
   async function load(place: Place) {
     setLoading(true);
     setError(null);
@@ -195,7 +205,7 @@ function Index() {
 
         {saved.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2" aria-label="Saved locations">
-            {saved.map((p) => (
+            {saved.map((p, i) => (
               <span
                 key={`${p.lat},${p.lon}`}
                 className="inline-flex items-center overflow-hidden rounded-full border border-input bg-card text-sm text-card-foreground"
@@ -206,6 +216,24 @@ function Index() {
                   title={`Show weather for ${p.name}`}
                 >
                   {p.name}
+                </button>
+                <button
+                  onClick={() => moveSaved(i, -1)}
+                  disabled={i === 0}
+                  aria-label={`Move ${p.name} earlier`}
+                  title="Move left"
+                  className="px-1.5 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => moveSaved(i, 1)}
+                  disabled={i === saved.length - 1}
+                  aria-label={`Move ${p.name} later`}
+                  title="Move right"
+                  className="px-1.5 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                >
+                  ›
                 </button>
                 <button
                   onClick={() => removeSaved(p)}
@@ -223,9 +251,9 @@ function Index() {
         {results.length > 0 && (
           <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-card text-card-foreground">
             {results.map((r) => (
-              <li key={`${r.lat},${r.lon}`}>
+              <li key={`${r.lat},${r.lon}`} className="flex items-center">
                 <button
-                  className="w-full px-3 py-2 text-left hover:bg-accent"
+                  className="min-w-0 flex-1 px-3 py-2 text-left hover:bg-accent"
                   onClick={() => {
                     setResults([]);
                     setQ("");
@@ -233,6 +261,18 @@ function Index() {
                   }}
                 >
                   {r.name} <span className="text-muted-foreground">{r.country}</span>
+                </button>
+                <button
+                  onClick={() => toggleSave(r)}
+                  aria-label={
+                    saved.some((s) => samePlace(s, r))
+                      ? `Remove ${r.name} from saved locations`
+                      : `Save ${r.name}`
+                  }
+                  title={saved.some((s) => samePlace(s, r)) ? "Saved — tap to remove" : "Save this location"}
+                  className="px-3 py-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  {saved.some((s) => samePlace(s, r)) ? "★" : "☆"}
                 </button>
               </li>
             ))}
