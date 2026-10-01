@@ -17,6 +17,21 @@ export const Route = createFileRoute("/")({
 });
 
 const SKY_PREF_KEY = "weather:sky-pref";
+const SAVED_KEY = "weather:saved-places";
+
+function loadSaved(): Place[] {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function samePlace(a: Place, b: Place) {
+  return a.lat === b.lat && a.lon === b.lon;
+}
 const SKY_OPTIONS = [
   { value: "auto", label: "Auto (weather)" },
   { value: "clear-day", label: "Sunny day" },
@@ -38,6 +53,26 @@ function Index() {
   const [results, setResults] = useState<Place[]>([]);
   const [showLocDialog, setShowLocDialog] = useState(false);
   const [skyChoice, setSkyChoice] = useState("auto");
+  const [saved, setSaved] = useState<Place[]>([]);
+
+  function persistSaved(next: Place[]) {
+    setSaved(next);
+    try {
+      localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+    } catch {}
+  }
+
+  function toggleSave(place: Place) {
+    persistSaved(
+      saved.some((s) => samePlace(s, place))
+        ? saved.filter((s) => !samePlace(s, place))
+        : [...saved, place],
+    );
+  }
+
+  function removeSaved(place: Place) {
+    persistSaved(saved.filter((s) => !samePlace(s, place)));
+  }
 
   async function load(place: Place) {
     setLoading(true);
@@ -58,6 +93,7 @@ function Index() {
       const saved = localStorage.getItem(SKY_PREF_KEY);
       if (saved && SKY_OPTIONS.some((o) => o.value === saved)) setSkyChoice(saved);
     } catch {}
+    setSaved(loadSaved());
   }, []);
 
   useEffect(() => {
