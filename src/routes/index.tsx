@@ -193,6 +193,33 @@ function Index() {
           </button>
         </form>
 
+        {saved.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2" aria-label="Saved locations">
+            {saved.map((p) => (
+              <span
+                key={`${p.lat},${p.lon}`}
+                className="inline-flex items-center overflow-hidden rounded-full border border-input bg-card text-sm text-card-foreground"
+              >
+                <button
+                  onClick={() => load(p)}
+                  className="px-3 py-1.5 hover:bg-accent"
+                  title={`Show weather for ${p.name}`}
+                >
+                  {p.name}
+                </button>
+                <button
+                  onClick={() => removeSaved(p)}
+                  aria-label={`Remove ${p.name} from saved locations`}
+                  title="Remove"
+                  className="px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {results.length > 0 && (
           <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-card text-card-foreground">
             {results.map((r) => (
@@ -224,7 +251,19 @@ function Index() {
           <p className="mt-12 text-center text-muted-foreground">Search for a city or use your location to begin.</p>
         )}
 
-        {weather && <WeatherView w={weather} />}
+        {weather && (
+          <>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => toggleSave(weather.place)}
+                className="rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-card-foreground hover:bg-accent"
+              >
+                {saved.some((s) => samePlace(s, weather.place)) ? "★ Saved — tap to remove" : "☆ Save this location"}
+              </button>
+            </div>
+            <WeatherView w={weather} />
+          </>
+        )}
       </main>
 
       {showLocDialog && (
