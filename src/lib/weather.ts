@@ -3,10 +3,28 @@ export type Place = { name: string; country?: string; lat: number; lon: number }
 export type Weather = {
   place: Place;
   fetchedAt: number;
-  current: { temp: number; code: number; wind: number; feels: number; is_day?: number };
-  hourly: { time: string; temp: number; code: number }[];
-  daily: { date: string; max: number; min: number; code: number }[];
+  current: { temp: number; code: number; wind: number; feels: number; is_day?: number; humidity?: number };
+  hourly: { time: string; temp: number; code: number; rain?: number }[];
+  daily: {
+    date: string; max: number; min: number; code: number;
+    rain?: number; sunrise?: string; sunset?: string; uv?: number; precip?: number;
+  }[];
+  periods?: Period[];
 };
+
+export type Period = { label: "Day" | "Night"; code: number; high: number; low: number; rain: number; wind: number };
+
+function summarize(label: Period["label"], items: { temp: number; code: number; rain: number; wind: number }[]): Period | null {
+  if (!items.length) return null;
+  return {
+    label,
+    code: Math.max(...items.map((x) => x.code)),
+    high: Math.max(...items.map((x) => x.temp)),
+    low: Math.min(...items.map((x) => x.temp)),
+    rain: Math.max(...items.map((x) => x.rain)),
+    wind: Math.max(...items.map((x) => x.wind)),
+  };
+}
 
 const CACHE_KEY = "weather:last";
 
@@ -36,16 +54,35 @@ export async function searchCity(q: string): Promise<Place[]> {
 export async function fetchWeather(place: Place): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}` +
-    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day` +
-    `&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day,relative_humidity_2m` +
+    `&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,precipitation_sum` +
     `&timezone=auto&forecast_days=7`;
   const r = await fetch(url);
   if (!r.ok) throw new Error("Weather request failed");
   const j = await r.json();
-  const today = j.daily.time[0];
-  const hourly = j.hourly.time
-    .map((t: string, i: number) => ({ time: t, temp: j.hourly.temperature_2m[i], code: j.hourly.weather_code[i] }))
-    .filter((h: { time: string }) => h.time.startsWith(today));
+  const today: string = j.daily.time[0];
+  const tomorrow: string = j.daily.time[1];
+  const all = j.hourly.time.map((t: string, i: number) => ({
+    time: t,
+    temp: j.hourly.temperature_2m[i],
+    code: j.hourly.weather_code[i],
+    rain: j.hourly.precipitation_probability?.[i] ?? 0,
+    wind: j.hourly.wind_speed_10m?.[i] ?? 0,
+  }));
+  const hourly = all
+    .filter((h: { time: string }) => h.time.startsWith(today))
+    .map(({ time, temp, code, rain }: any) => ({ time, temp, code, rain }));
+  const hr = (t: string) => +t.slice(11, 13);
+  // Day: 06–18 today. Night: 18–24 today + 00–06 tomorrow.
+  const day = summarize("Day", all.filter((h: any) => h.time.startsWith(today) && hr(h.time) >= 6 && hr(h.time) < 18));
+  const night = summarize(
+    "Night",
+    all.filter(
+      (h: any) => (h.time.startsWith(today) && hr(h.time) >= 18) || (h.time.startsWith(tomorrow) && hr(h.time) < 6),
+    ),
+  );
+  const periods = [day, night].filter(Boolean) as Period[];
   const w: Weather = {
     place,
     fetchedAt: Date.now(),
@@ -55,13 +92,20 @@ export async function fetchWeather(place: Place): Promise<Weather> {
       code: j.current.weather_code,
       wind: j.current.wind_speed_10m,
       is_day: j.current.is_day,
+      humidity: j.current.relative_humidity_2m,
     },
     hourly,
+    periods,
     daily: j.daily.time.map((d: string, i: number) => ({
       date: d,
       max: j.daily.temperature_2m_max[i],
       min: j.daily.temperature_2m_min[i],
       code: j.daily.weather_code[i],
+      rain: j.daily.precipitation_probability_max?.[i],
+      sunrise: j.daily.sunrise?.[i],
+      sunset: j.daily.sunset?.[i],
+      uv: j.daily.uv_index_max?.[i],
+      precip: j.daily.precipitation_sum?.[i],
     })),
   };
   try {

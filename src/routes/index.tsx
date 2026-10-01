@@ -18,6 +18,32 @@ export const Route = createFileRoute("/")({
 
 const SKY_PREF_KEY = "weather:sky-pref";
 const SAVED_KEY = "weather:saved-places";
+const UNITS_KEY = "weather:units";
+type Units = "metric" | "imperial";
+
+function tempU(c: number, u: Units) {
+  return Math.round(u === "imperial" ? (c * 9) / 5 + 32 : c);
+}
+function windU(k: number, u: Units) {
+  return u === "imperial" ? `${Math.round(k / 1.609)} mph` : `${Math.round(k)} km/h`;
+}
+function precipU(mm: number, u: Units) {
+  return u === "imperial" ? `${(mm / 25.4).toFixed(2)} in` : `${mm.toFixed(1)} mm`;
+}
+function uvLabel(uv: number) {
+  if (uv < 3) return "Low";
+  if (uv < 6) return "Moderate";
+  if (uv < 8) return "High";
+  if (uv < 11) return "Very high";
+  return "Extreme";
+}
+function ago(ts: number, now: number) {
+  const m = Math.floor((now - ts) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+}
 
 function loadSaved(): Place[] {
   try {
@@ -54,6 +80,15 @@ function Index() {
   const [showLocDialog, setShowLocDialog] = useState(false);
   const [skyChoice, setSkyChoice] = useState("auto");
   const [saved, setSaved] = useState<Place[]>([]);
+  const [units, setUnits] = useState<Units>("metric");
+
+  function toggleUnits() {
+    const next: Units = units === "metric" ? "imperial" : "metric";
+    setUnits(next);
+    try {
+      localStorage.setItem(UNITS_KEY, next);
+    } catch {}
+  }
 
   function persistSaved(next: Place[]) {
     setSaved(next);
@@ -104,6 +139,9 @@ function Index() {
       if (saved && SKY_OPTIONS.some((o) => o.value === saved)) setSkyChoice(saved);
     } catch {}
     setSaved(loadSaved());
+    try {
+      if (localStorage.getItem(UNITS_KEY) === "imperial") setUnits("imperial");
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -164,6 +202,14 @@ function Index() {
         <header className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight">My Weather Pal</h1>
           <div className="flex items-center gap-3">
+            <button
+              onClick={toggleUnits}
+              aria-label={`Switch to ${units === "metric" ? "Fahrenheit" : "Celsius"}`}
+              title="Switch units"
+              className="rounded-lg border border-input bg-card px-2 py-1 text-sm font-medium text-card-foreground hover:bg-accent"
+            >
+              {units === "metric" ? "°C" : "°F"}
+            </button>
             <select
               value={skyChoice}
               onChange={onSkyChange}
@@ -301,7 +347,7 @@ function Index() {
                 {saved.some((s) => samePlace(s, weather.place)) ? "★ Saved — tap to remove" : "☆ Save this location"}
               </button>
             </div>
-            <WeatherView w={weather} />
+            <WeatherView w={weather} units={units} loading={loading} onRefresh={() => load(weather.place)} />
           </>
         )}
       </main>
@@ -329,25 +375,117 @@ function Index() {
   );
 }
 
-function WeatherView({ w }: { w: Weather }) {
+function WeatherView({
+  w,
+  units,
+  loading,
+  onRefresh,
+}: {
+  w: Weather;
+  units: Units;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
   const d = describe(w.current.code);
+  const today = w.daily[0];
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, [w.fetchedAt]);
+  const time = (iso?: string) => (iso ? iso.slice(11, 16) : "—");
+  let daylight = "";
+  if (today?.sunrise && today?.sunset) {
+    const mins = (new Date(today.sunset).getTime() - new Date(today.sunrise).getTime()) / 60000;
+    daylight = `${Math.floor(mins / 60)}h ${Math.round(mins % 60)}m of daylight`;
+  }
+  const stats: { label: string; value: string }[] = [];
+  if (w.current.humidity != null) stats.push({ label: "Humidity", value: `${Math.round(w.current.humidity)}%` });
+  if (today?.uv != null) stats.push({ label: "UV index", value: `${Math.round(today.uv)} · ${uvLabel(today.uv)}` });
+  if (today?.precip != null) stats.push({ label: "Precip. today", value: precipU(today.precip, units) });
+
   return (
     <>
       <section className="mt-6 rounded-2xl bg-card p-6 text-card-foreground shadow-sm">
-        <p className="text-sm text-muted-foreground">
-          {w.place.name}
-          {w.place.country ? `, ${w.place.country}` : ""}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            {w.place.name}
+            {w.place.country ? `, ${w.place.country}` : ""}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Updated {ago(w.fetchedAt, now)}</span>
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              aria-label="Refresh weather"
+              title="Refresh"
+              className={`rounded-full px-1.5 text-base hover:bg-accent hover:text-foreground disabled:opacity-50 ${loading ? "animate-spin" : ""}`}
+            >
+              ↻
+            </button>
+          </div>
+        </div>
         <div className="mt-2 flex items-center gap-4">
           <span className="text-6xl">{d.icon}</span>
           <div>
-            <p className="text-6xl font-bold">{Math.round(w.current.temp)}°</p>
+            <p className="text-6xl font-bold">{tempU(w.current.temp, units)}°</p>
             <p className="text-muted-foreground">
-              {d.label} · Feels {Math.round(w.current.feels)}° · Wind {Math.round(w.current.wind)} km/h
+              {d.label} · Feels {tempU(w.current.feels, units)}° · Wind {windU(w.current.wind, units)}
             </p>
           </div>
         </div>
+
+        {stats.length > 0 && (
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            {stats.map((s) => (
+              <div key={s.label} className="rounded-lg bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">{s.label}</p>
+                <p className="text-sm font-medium">{s.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {today?.sunrise && (
+          <div className="mt-4 flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
+            <span>🌅 {time(today.sunrise)}</span>
+            <span className="text-xs text-muted-foreground">{daylight}</span>
+            <span>🌇 {time(today.sunset)}</span>
+          </div>
+        )}
       </section>
+
+      {w.periods && w.periods.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-semibold">Day &amp; night</h2>
+          <div className="grid grid-cols-2 gap-2">
+            {w.periods.map((p) => {
+              const pd = describe(p.code);
+              return (
+                <div key={p.label} className="rounded-lg bg-card p-4 text-card-foreground">
+                  <p className="text-xs text-muted-foreground">
+                    {p.label === "Day" ? "☀️ Day (6am–6pm)" : "🌙 Tonight (6pm–6am)"}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-3xl">{pd.icon}</span>
+                    <div>
+                      <p className="font-medium">{pd.label}</p>
+                      <p className="text-sm">
+                        <span className="font-medium">{tempU(p.high, units)}°</span>{" "}
+                        <span className="text-muted-foreground">{tempU(p.low, units)}°</span>
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    💧 {Math.round(p.rain)}% · Wind up to {windU(p.wind, units)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="mb-2 font-semibold">Today</h2>
@@ -356,7 +494,8 @@ function WeatherView({ w }: { w: Weather }) {
             <div key={h.time} className="min-w-16 rounded-lg bg-card px-2 py-3 text-center text-card-foreground">
               <p className="text-xs text-muted-foreground">{h.time.slice(11, 16)}</p>
               <p className="text-xl">{describe(h.code).icon}</p>
-              <p className="font-medium">{Math.round(h.temp)}°</p>
+              <p className="font-medium">{tempU(h.temp, units)}°</p>
+              {h.rain != null && h.rain >= 20 && <p className="text-xs text-primary">💧{h.rain}%</p>}
             </div>
           ))}
         </div>
@@ -370,10 +509,13 @@ function WeatherView({ w }: { w: Weather }) {
               <span className="w-24">
                 {i === 0 ? "Today" : new Date(day.date + "T12:00").toLocaleDateString(undefined, { weekday: "long" })}
               </span>
-              <span className="text-xl" title={describe(day.code).label}>{describe(day.code).icon}</span>
+              <span className="flex w-20 items-center gap-1">
+                <span className="text-xl" title={describe(day.code).label}>{describe(day.code).icon}</span>
+                {day.rain != null && day.rain >= 20 && <span className="text-xs text-primary">💧{day.rain}%</span>}
+              </span>
               <span className="w-24 text-right">
-                <span className="font-medium">{Math.round(day.max)}°</span>{" "}
-                <span className="text-muted-foreground">{Math.round(day.min)}°</span>
+                <span className="font-medium">{tempU(day.max, units)}°</span>{" "}
+                <span className="text-muted-foreground">{tempU(day.min, units)}°</span>
               </span>
             </li>
           ))}
