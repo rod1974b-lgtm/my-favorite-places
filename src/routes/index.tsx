@@ -78,7 +78,9 @@ function Index() {
     const to = index + dir;
     if (to < 0 || to >= saved.length) return;
     const next = [...saved];
-    [next[index], next[to]] = [next[to], next[index]];
+    const item = next[index]!;
+    next[index] = next[to]!;
+    next[to] = item;
     persistSaved(next);
   }
 
