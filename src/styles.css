@@ -141,4 +141,83 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+
+  /*
+   * Sky-inspired page background. The wrapper element carries a .sky-<key>
+   * class that points --sky at a gradient matching the current conditions;
+   * .sky applies it (falling back to the plain background color).
+   */
+  .sky {
+    background: var(--sky, var(--background));
+  }
+
+  .sky-default {
+    --sky: linear-gradient(180deg, oklch(0.88 0.04 250), oklch(0.96 0.015 240));
+  }
+
+  .sky-clear-day {
+    --sky: linear-gradient(180deg, oklch(0.78 0.1 248), oklch(0.9 0.055 232) 60%, oklch(0.97 0.025 205));
+  }
+
+  .sky-clear-night {
+    --sky: linear-gradient(180deg, oklch(0.26 0.06 278), oklch(0.17 0.045 285));
+    --foreground: oklch(0.96 0.01 260);
+    --muted-foreground: oklch(0.78 0.03 260);
+  }
+
+  .sky-cloudy-day {
+    --sky: linear-gradient(180deg, oklch(0.8 0.03 248), oklch(0.92 0.02 250));
+  }
+
+  .sky-cloudy-night {
+    --sky: linear-gradient(180deg, oklch(0.24 0.04 265), oklch(0.15 0.03 268));
+    --foreground: oklch(0.96 0.01 260);
+    --muted-foreground: oklch(0.78 0.03 260);
+  }
+
+  .sky-fog {
+    --sky: linear-gradient(180deg, oklch(0.84 0.015 255), oklch(0.94 0.008 255));
+  }
+
+  .sky-rain {
+    --sky: linear-gradient(180deg, oklch(0.66 0.07 252), oklch(0.82 0.035 248));
+  }
+
+  .sky-snow {
+    --sky: linear-gradient(180deg, oklch(0.87 0.035 280), oklch(0.96 0.015 275));
+  }
+
+  .sky-storm {
+    --sky: linear-gradient(180deg, oklch(0.56 0.06 268), oklch(0.72 0.04 262));
+  }
+
+  .dark .sky-default {
+    --sky: linear-gradient(180deg, oklch(0.2 0.04 264), oklch(0.14 0.035 268));
+  }
+
+  .dark .sky-clear-day,
+  .dark .sky-fog {
+    --sky: linear-gradient(180deg, oklch(0.22 0.045 262), oklch(0.14 0.035 268));
+  }
+
+  .dark .sky-clear-night,
+  .dark .sky-cloudy-night {
+    --sky: linear-gradient(180deg, oklch(0.2 0.05 280), oklch(0.13 0.04 284));
+  }
+
+  .dark .sky-cloudy-day {
+    --sky: linear-gradient(180deg, oklch(0.21 0.035 262), oklch(0.14 0.03 266));
+  }
+
+  .dark .sky-rain {
+    --sky: linear-gradient(180deg, oklch(0.24 0.05 258), oklch(0.15 0.04 262));
+  }
+
+  .dark .sky-snow {
+    --sky: linear-gradient(180deg, oklch(0.24 0.04 275), oklch(0.16 0.03 280));
+  }
+
+  .dark .sky-storm {
+    --sky: linear-gradient(180deg, oklch(0.2 0.05 275), oklch(0.12 0.04 280));
+  }
 }
